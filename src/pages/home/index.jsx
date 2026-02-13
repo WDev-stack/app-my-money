@@ -8,6 +8,7 @@ export default function Home() {
   const [saldo, setSaldo] = useState(0);
   const [entrada, setEntrada] = useState(0);
   const [saida, setSaida] = useState(0);
+  const [editandoId, setEditandoId] = useState(null);
 
   const [historico, setHistorico] = useState(() => {
     if (typeof window !== "undefined") {
@@ -24,35 +25,50 @@ export default function Home() {
 
     historico.forEach((item) => {
       somaTotal += item.valor;
-      if (item.valor > 0) {
-        contadorEntrada += 1;
-      } else {
-        contadorSaida += 1;
-      }
+      if (item.valor > 0) contadorEntrada += 1;
+      else contadorSaida += 1;
     });
 
     setSaldo(somaTotal);
     setEntrada(contadorEntrada);
     setSaida(contadorSaida);
-
     localStorage.setItem("minhas_transacoes", JSON.stringify(historico));
   }, [historico]);
-  
-  const adicionarTransacao = async (n, v) => {
+
+  const prepararEdicao = (item) => {
+    setEditandoId(item.id);
+    setNome(item.nome);
+    setValor(item.valor.toString());
+    setErro("");
+  };
+
+  const manipularTransacao = async (e) => {
+    e.preventDefault();
     setErro("");
     setLoading(true);
-    try {
-      const novoItem = {
-        id: Date.now(),
-        nome: n,
-        valor: Number(v),
-      };
 
-      if (!novoItem.nome || novoItem.valor === 0) {
+    try {
+      if (!nome || !valor || Number(valor) === 0) {
         throw new Error("Preencha a descrição e um valor válido!");
       }
 
-      setHistorico((prev) => [novoItem, ...prev]);
+      if (editandoId) {
+        const historicoAtualizado = historico.map((item) =>
+          item.id === editandoId
+            ? { ...item, nome: nome, valor: Number(valor) }
+            : item
+        );
+        setHistorico(historicoAtualizado);
+        setEditandoId(null);
+      } else {
+        const novoItem = {
+          id: Date.now(),
+          nome: nome,
+          valor: Number(valor),
+        };
+        setHistorico((prev) => [novoItem, ...prev]);
+      }
+
       setNome("");
       setValor("");
     } catch (err) {
@@ -63,27 +79,29 @@ export default function Home() {
   };
 
   const deletarItem = (id) => {
+    if (editandoId === id) setEditandoId(null);
     setHistorico(historico.filter((item) => item.id !== id));
   };
 
   const limparTudo = () => {
     if (window.confirm("Deseja apagar todos os registros?")) {
       setHistorico([]);
+      setEditandoId(null);
       localStorage.removeItem("minhas_transacoes");
     }
   };
 
   return (
-    <div>
+    <div style={{ padding: "20px", maxWidth: "600px", margin: "0 auto", fontFamily: "sans-serif" }}>
       <header>
-        <h1>MyMoney Pro</h1>
+        <h1>MyMoney</h1>
         <p>Gestão de Finanças Pessoais</p>
       </header>
 
-      <section>
+      <section style={{ display: "flex", gap: "20px", background: "#f4f4f4", padding: "15px", borderRadius: "8px" }}>
         <div>
           <span>Saldo Atual</span>
-          <h2>R$ {saldo.toFixed(2)}</h2>
+          <h2 style={{ color: saldo >= 0 ? "green" : "red" }}>R$ {saldo.toFixed(2)}</h2>
         </div>
         <div>
           <span>Entradas</span>
@@ -95,30 +113,52 @@ export default function Home() {
         </div>
       </section>
 
-      <form onSubmit={(e) => { e.preventDefault(); adicionarTransacao(nome, valor); }}>
+      <hr style={{ margin: "20px 0" }} />
+
+      <h3>{editandoId ? "📝 Editando Registro" : "➕ Nova Transação"}</h3>
+
+      <form onSubmit={manipularTransacao} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         <input
           placeholder="Descrição"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
+          style={{ padding: "8px" }}
         />
         <input
-          placeholder="Valor"
+          placeholder="Valor (Ex: 10 ou -10)"
           value={valor}
           type="number"
           onChange={(e) => setValor(e.target.value)}
+          style={{ padding: "8px" }}
         />
-        <button type="submit" disabled={loading}>
-          {loading ? "..." : "Lançar"}
+        <button 
+          type="submit" 
+          disabled={loading}
+          style={{ padding: "10px", background: editandoId ? "#2196F3" : "#4CAF50", color: "white", border: "none", cursor: "pointer" }}
+        >
+          {loading ? "..." : editandoId ? "Salvar Alteração" : "Lançar"}
         </button>
+
+        {editandoId && (
+          <button 
+            type="button" 
+            onClick={() => { setEditandoId(null); setNome(""); setValor(""); }}
+            style={{ padding: "10px", background: "#ccc", border: "none", cursor: "pointer" }}
+          >
+            Cancelar
+          </button>
+        )}
       </form>
 
-      {erro && <div>{erro}</div>}
+      {erro && <p style={{ color: "red", fontWeight: "bold" }}>{erro}</p>}
 
-      <section>
-        <div>
+      <section style={{ marginTop: "30px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3>Histórico Recente</h3>
           {historico.length > 0 && (
-            <button onClick={limparTudo}>Limpar Tudo</button>
+            <button onClick={limparTudo} style={{ color: "red", cursor: "pointer", border: "none", background: "none" }}>
+              Limpar Tudo
+            </button>
           )}
         </div>
 
@@ -127,16 +167,29 @@ export default function Home() {
             <p>Nenhuma movimentação registrada.</p>
           ) : (
             historico.map((item) => (
-              <div key={item.id}>
+              <div 
+                key={item.id} 
+                style={{ 
+                  border: editandoId === item.id ? "2px solid #2196F3" : "1px solid #ddd", 
+                  padding: "10px", 
+                  margin: "10px 0", 
+                  borderRadius: "5px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
                 <div>
                   <strong>{item.nome}</strong>
+                  <br />
                   <small>{new Date(item.id).toLocaleDateString()}</small>
                 </div>
-                <div>
-                  <span>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ color: item.valor > 0 ? "green" : "red", fontWeight: "bold" }}>
                     R$ {item.valor.toFixed(2)}
                   </span>
-                  <button onClick={() => deletarItem(item.id)}>🗑️</button>
+                  <button onClick={() => prepararEdicao(item)} style={{ cursor: "pointer" }}>✏️</button>
+                  <button onClick={() => deletarItem(item.id)} style={{ cursor: "pointer" }}>🗑️</button>
                 </div>
               </div>
             ))
